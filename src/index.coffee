@@ -7,7 +7,7 @@ LEVELS = do ->
     answer = {}
 
     ['trace', 'debug', 'info', 'warn', 'error', 'fatal'].forEach (level) ->
-        answer[bunyan[level.toUpperCase()]] = level
+        answer[bunyan[level.toUpperCase()]] = level.toUpperCase()
 
     return answer
 
@@ -39,37 +39,30 @@ class BunyanLumberjackStream extends Writable
         # Clone the entry so we can modify it
         entry = clone(entry)
 
-        host = entry.hostname ? @_host
+        entry.message = entry.message ? entry.msg
+        entry.line = entry.message
+        delete entry.msg
 
         # Massage the entry to look like a logstash entry.
-        bunyanLevel = entry.level
+        entry.bunyanLevel = entry.level
         if LEVELS[entry.level]?
             entry.level = LEVELS[entry.level]
 
-        entry.message = entry.msg ? ''
-        delete entry.msg
+        entry.HOSTNAME = entry.hostname ? @_host
+        entry.host = entry.hostname ? @_host
 
-        if entry.time?
-            entry['@timestamp'] = entry.time.toISOString()
-            delete entry.time
-
+        delete entry.time
         delete entry.v
 
         # Add some extra fields
         entry.tags ?= @_tags
-        entry.source = "#{host}/#{@_application}"
-
-        dataFrame = {
-            line: JSON.stringify(entry)
-            host: host
-            bunyanLevel: bunyanLevel
-        }
+        entry.source = "#{entry.host}/#{@_application}"
 
         # Set type directly on the data frame, so we can use it for conditionals up in
         # logstash filters section.
-        if @_type? then dataFrame.type = @_type
+        if @_type? then entry.type = @_type
 
-        @_client.writeDataFrame dataFrame
+        @_client.writeDataFrame entry
 
         done()
 
